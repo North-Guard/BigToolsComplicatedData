@@ -1,0 +1,207 @@
+\documentclass[12pt]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{parskip}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{framed}
+\usepackage{hyperref}
+\definecolor{LightGray}{gray}{0.97}
+
+\renewcommand\thesection{Exercise \arabic{chapter}.\arabic{section}: }
+\author{The Cool Kids}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Setting
+
+\newcommand{\weeknr}{2}
+\newcommand{\weektitle}{Python}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\title{Big Tools for Complicated Data \\Week \weeknr: \weektitle}
+\usepackage{listings}
+
+% Overall settings
+\lstset{
+  basicstyle=\ttfamily\small,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  breaklines = true,
+  tabsize=4
+} 
+  
+% Custom colors
+\definecolor{deepblue}{rgb}{0,0,0.5}
+\definecolor{deepred}{HTML}{94558D}
+\definecolor{deepgreen}{HTML}{008080}
+\definecolor{commentgrey}{HTML}{808080}
+
+
+% Python style for highlighting
+\lstdefinestyle{Python}{
+  language=Python,
+  %
+  otherkeywords={self},             % Add keywords here
+  % 
+  % Standard highlighting
+  keywordstyle=\color{deepblue},
+  commentstyle=\color{commentgrey},
+  stringstyle=\bfseries\color{deepgreen},
+  % 
+  % Special emphasis
+  emph=[1]{self, __init__, __doc__, __name__, __dict__, __new__, __del__, __repr__, __str__, __bytes__, __format__,
+  __lt__, __le__, __eq__, __ne__, __gt__, __ge__, __hash__, __bool__, __getattr__, __getattribute__,
+  __setattr__, __delattr__, __dir__, __get__, __set__, __delete__},
+  emphstyle=[1]{\color{deepred}},
+  emph=[2]{def, print, class, True, False},
+  emphstyle=[2]{\bfseries\color{deepblue}},
+  %
+  showstringspaces=false            % 
+}
+
+\begin{document}
+
+\maketitle
+
+\section*{Info}
+
+All code is available at \url{https://github.com/North-Guard/BigToolsComplicatedData/tree/master/Week2}. 
+The directory includes 5 scripts, where some of the scripts handle the same problem but are optimized and both kept for later reference. \\
+
+Files:
+\begin{itemize}
+\item \lstinline|exercise_1.py|
+\item \lstinline|exercise_2.py|
+\item \lstinline|exercise_2_optimized.py|
+\item \lstinline|exercise_3.py|
+\item \lstinline|exercise_3_optimized.py|
+\end{itemize}
+
+\setcounter{chapter}{1}
+
+\clearpage
+\section{lists and recursion}
+Write a script that takes an integer N, and outputs all bit-strings of length N as lists. For example: $3 -> [0,0,0], [0,0,1],[0,1,0],[0,1,1],[1,0,0],[1,0,1],[1,1,0],[1,1,1]$. As a sanity check, remember that there are $2^N$ such lists.
+
+Do not use the bin-function in Python. Do not use strings at all. Try to solve this using only lists, integers, if-statements, loops, functions and the map function (you don’t need all these things).
+
+\textbf{Solution:}
+Line 5 computes the sequences on the subproblems for smaller $N$. The method then loops through these lines and creates the extensions by extending the sequences with $0$'s and $1$'s.
+\begin{framed}
+\begin{lstlisting}[style=Python, numbers=left]
+def bits(N):
+    if N == 1:
+        return [[0], [1]]
+    else:
+        l = bits(N-1)
+        l_all = []
+        for i in range(len(l)):
+            l0 = []
+            l1 = []
+            l0.extend(l[i])  # extend is used to avoid making a list of lists, but instead appending the elements of the list to the new list
+            l0.extend([0])
+            l1.extend(l[i])
+            l1.extend([1])
+            l_all.append(l0)
+            l_all.append(l1)
+
+        return l_all
+
+N = 3
+s = bits(N)
+
+print(s)
+print(len(s))
+\end{lstlisting}
+\end{framed}
+
+\clearpage
+\section{bag of words}
+Write a script that takes this file (from this Kaggle competition), extracts the \texttt{request\_text} field from each dictionary in the list, and construct a bag of words representation of the string (string to count-list).
+
+There should be one row pr. text. The matrix should be $N x M$ where $N$ is the number of texts and $M$ is the number of distinct words in all the texts.  The result should be a list of lists ($[[0,1,0],[1,0,0]]$ is a matrix with two rows and three columns).
+
+\textbf{Solution:}
+The following scripts performs the task with comments on segments. 
+\begin{framed}
+\begin{lstlisting}[style=Python, numbers=left]
+from time import time
+import matplotlib.pyplot as plt
+import numpy as np
+plt.close("all")
+
+# Load the data
+with open('Week2/pizza-train.json', 'r') as file:
+    lines = [line.split() for line in file.readlines()]
+
+# Get request_text's
+lines = [line[1:] for line in lines 
+	     if line[0] == '"request_text":']
+n_lines = len(lines)
+
+# Find all distinct words in vocabulary
+words = set()
+idx = 0
+for line in lines:
+    text = line
+    words.update(text)
+
+# Make a word-list and mapping to indices
+words = sorted(list(words))
+word2idx = {word: idx for idx, word in enumerate(words)}
+n_words = len(words)
+
+# Bag-of-words list of lists
+bow = [[0] * n_words for _ in range(n_lines)]
+for line_nr, line in enumerate(lines):
+    text = line
+    bow_row = bow[line_nr]
+    for word in text:
+        ix = word2idx[word]
+        bow_row[ix] = 1
+\end{lstlisting}
+\end{framed}
+
+\clearpage
+\section{Make Your Own}
+Make your own exercise to teach people how to use python dictionaries. Provide a solution for the exercise. 
+
+\textit{Use dictionaries to speed up the recursive function from exercise 1, e.g. when using recursive functions with a large number of repetitive recalculations, e.g. a large $N$ in this case. Specifically, build a dictionary called bits\_dict into the function, so that all the lists for values <= the biggest N that has been calculated can be obtained from the dictionary by calling bits\_dict[value $<=$ the biggest calculated so far]. Last but not least, think about why a dictionary can speed up recursive functions.}
+
+\textbf{Solution:}
+The code-snippet below shows a solution to the exercise. Line 3 defines the dictionary and initializes it with the base case where $N=1$. When given a number, \texttt{bits} first check whether it already knows the solution to the problem and returns this problem if so. Otherwise it creates a list by extracting all lists from the subproblem for $N-1$ and combining these with $0$ and $1$ (lines 7-11). 
+
+\begin{framed}
+\begin{lstlisting}[style=Python, numbers=left]
+import time
+
+bits_dict = {1: [[0], [1]]}
+
+def bits(n):
+    if n not in bits_dict:
+        l_all = [
+            [val, *li]
+            for val in [0, 1]
+            for li in bits(n - 1)
+        ]
+
+        # Store subproblem result
+        bits_dict[n] = l_all
+
+    return bits_dict[n]
+
+N = 22
+start = time()
+s = bits(N)
+end = time()
+
+print("Sequences created : {}".format(len(s)))
+print("Sequences expected: {}".format(2**N))
+print("Time for creation: {:.2f}s".format(end-start))
+
+\end{lstlisting}
+\end{framed}
+
+\end{document}
