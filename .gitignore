@@ -329,3 +329,4 @@ TSWLatexianTemp*
 # expex forward references with \gathertags
 *-tags.tex
 /Week2/Latex/Week2.pdf
+/.idea/*
