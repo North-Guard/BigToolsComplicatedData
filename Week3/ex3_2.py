@@ -40,4 +40,4 @@ res = root(f, x0, coeffs)
 
 # Print the approximated roots of the function
 for x in res.x:
-    print("x = {0:5.3f}\t f(x) = {1:5.3f}".format(x, f(x, coeffs)))
+    print("x = {0:6.4f}\t f(x) = {1:6.4f}".format(x, f(x, coeffs)))
