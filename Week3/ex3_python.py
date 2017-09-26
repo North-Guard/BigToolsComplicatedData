@@ -8,7 +8,7 @@ for _ in range(n_tests):
     i = 1.0
     the_sum = 0.0
     while i <= n:
-        the_sum += i ** 2
+        the_sum += 1 / (i ** 2)
         i += 1
 end = time()
 
