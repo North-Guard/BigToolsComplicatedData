@@ -19,7 +19,7 @@ coeffs = np.polyfit(M[:, 0], M[:, 1], deg=3)
 # Defining the function that calculates y, given a point x 
 # and the coefficient that were estimated by the polyfit function above
 def f(x, coeff):
-    y = [x**i * coeff[i] for i in range(len(coeff))]
+    y = [x**(i) * coeff[-(i+1)] for i in range(len(coeff))]
     return sum(y)
 
 # plot function on the interval [-20,20]
