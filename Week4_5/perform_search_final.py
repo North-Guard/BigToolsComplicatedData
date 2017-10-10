@@ -35,6 +35,7 @@ start = time()
 word_search_path = Path(input_dir, "word_search")
 if Path(word_search_path, "vocabulary.p").is_file():
     print("Loading files")
+    vocabulary_words = pickle.load(Path(word_search_path, "vocabulary_words.p").open("rb"))
     vocabulary = pickle.load(Path(word_search_path, "vocabulary.p").open("rb"))
     massive_keys_string = pickle.load(Path(word_search_path, "massive_keys_string.p").open("rb"))
     key_index_list = pickle.load(Path(word_search_path, "key_index_list.p").open("rb"))
@@ -45,9 +46,11 @@ else:
 
     print("Creating vocabulary.")
     vocabulary = dict()
+    max_id = 0
     fetch = cursor_words.fetchone()
     while fetch is not None:
         idx, word = fetch
+        max_id = max(max_id, idx)
         if idx % 1000000 == 0:
             print(f"{idx} / {max_word_id}")
         vocabulary[word] = idx
@@ -60,19 +63,30 @@ else:
 
     # Determine indices of keys
     print("Making key-indices")
-    key_lengths = [len(key) for key in keys]
     key_index_list = [val
-                      for idx, length in enumerate(key_lengths)
-                      for val in [idx] * (length + 1)]
+                      for word in keys
+                      for val in [vocabulary[word]] * (len(word) + 1)]
+
+    print("Making vocabulary words")
+    vocabulary_words = [None] * (max_id + 1)
+    for key, val in vocabulary.items():
+        vocabulary_words[val] = key
 
     # Storage
     print("Storing files for word-search")
+    pickle.dump(vocabulary_words, Path(word_search_path, "vocabulary_words.p").open("wb"))
     pickle.dump(vocabulary, Path(word_search_path, "vocabulary.p").open("wb"))
     pickle.dump(massive_keys_string, Path(word_search_path, "massive_keys_string.p").open("wb"))
     pickle.dump(key_index_list, Path(word_search_path, "key_index_list.p").open("wb"))
 
 end = time()
 print(f"Created / Loaded files in {end - start:.2f}s")
+
+# Test
+pattern = re.compile('elephants')
+match_indices = [match.start() for match in pattern.finditer(massive_keys_string)]
+located_keys = [key_index_list[match] for match in match_indices]
+print('elephants', "is in", vocabulary_words[located_keys[0]])
 
 ########################################################################################
 ###############################################################################################################
@@ -114,10 +128,13 @@ print(f"\nAll patterns in cat-article matched in {time() - start:.2f}s")
 #
 # 'A' search
 #
+
 print("\n\n" + "-" * 80)
 print("'A' Search")
 print("-" * 80)
 start = time()
+max_words_limit = 5000000
+min_letters = 3
 
 # Get 'a'-articles
 a_article_ids = pickle.load(Path(input_dir, "a_articles.p").open("rb"))
@@ -134,41 +151,6 @@ queries = [
     ['first', (0, 85), 'letter', (0, 100), 'alphabet', (0, 200), 'consonant']
 ]
 
-# Make queries
-for query in queries:
-    query_start = time()
-    print(f"\nStarting query for {query}")
-    results = 0
-    matches = 0
-    for article in articles:
-        result = nested_search(query, article)
-        if result:
-            results += 1
-            matches += len(result)
-    print("Got {} results and {} matches in {:.2f}s".format(results, matches, time() - query_start))
-
-print(f"\nAll 'A'-articles and all patterns matched in {time() - start:.2f}s")
-
-########################################################################################
-###############################################################################################################
-########################################################################################
-#
-# All articles
-#
-print("\n\n" + "-" * 80)
-print("All articles Search")
-print("-" * 80)
-start = time()
-
-# Queries
-queries = [
-    ['elephants', (0, 20), 'are', (0, 20), 'to'],
-    # ['technical', (0, 20), 'university', (0, 20), 'denmark'],
-    # ['testing', (0, 20), 'with', (0, 20), 'a', (0, 30), 'lot', (0, 4), 'of', (0, 5), 'words'],
-    # ['stress', (0, 250), 'test'],
-    # ['object', (10, 200), 'application', (0, 100), 'python', (10, 200), 'system', (0, 100), 'computer',
-    #  (0, 10), 'science', (0, 150), 'linux', (0, 200), 'ruby']
-]
 
 for query in queries:
 
@@ -178,13 +160,16 @@ for query in queries:
     print(f"\nStarting query for {query}")
 
     # Start main timer
-    search_start = time()
+    query_start = time()
 
     ########################################################################################
     # Word substring search -> word set
 
     # Specific words
-    search_words = [word for word in query if isinstance(word, str)]
+    search_words = []
+    while not search_words:
+        search_words = [word for word in query if isinstance(word, str) if len(word) >= min_letters]
+        min_letters -= 1
 
     # Search for words as substrings in word-database
     matching_words = []
@@ -199,7 +184,138 @@ for query in queries:
         located_keys = [key_index_list[match] for match in match_indices]
 
         # Append
-        matching_words.append(located_keys)
+        if len(located_keys) <= max_words_limit:
+            matching_words.append(located_keys)
+
+    # print("matching_words:", len(matching_words), sum([len(val) for val in matching_words]))
+
+    ########################################################################################
+    # Words -> articles
+
+    # Go through word-matches and determine related articles
+    article_list_list = []
+    for word_matches in matching_words:
+        # Map words to articles
+        cursor_words.execute("SELECT article_list FROM words WHERE ident in ({})"
+                             .format(",".join([str(val) for val in word_matches])))
+        articles = [val
+                    for val_list in cursor_words.fetchall()
+                    for val in json.loads(val_list[0])]
+        article_list_list.append(articles)
+
+    # Collective article set
+    intersecting_articles = set(a_article_ids)
+    for article_set in article_list_list:
+        intersecting_articles = intersecting_articles.intersection(set(article_set))
+
+    # print("intersecting_articles:", len(intersecting_articles))
+
+    ########################################################################################
+    # Initial patterns match in article set
+
+    # Pattern
+    search_pattern = re.compile(task_re_pattern(query))
+
+    # Database query
+    cursor_articles.execute("SELECT ident, article FROM articles WHERE ident in ({})"
+                            .format(",".join([str(val) for val in list(intersecting_articles)])))
+
+    # Fetch articles and filter
+    filtered_articles = dict()
+    filtered_articles_results = dict()
+    for idx in range(len(intersecting_articles)):
+
+        # Get article
+        fetch = cursor_articles.fetchone()
+        if fetch is not None:
+            article_nr, article = fetch
+
+            search = search_pattern.search(article)
+            if search:
+                filtered_articles[article_nr] = article
+                filtered_articles_results[article_nr] = search
+
+    # print("filtered_articles_results:", len(filtered_articles_results))
+
+    ########################################################################################
+    # Recursive matching of pattern
+
+    # Search results
+    results = 0
+    matches = 0
+
+    # Go through filtered articles
+    len(filtered_articles)
+    for key_nr, key in enumerate(list(filtered_articles.keys())):
+        result = nested_search(task_inputs=query, string=filtered_articles[key])
+        if result:
+            results += 1
+            matches += len(result)
+
+    print("Got {} results and {} matches in {:.2f}s".format(results, matches, time() - query_start))
+
+print(f"\nAll 'A'-articles and all patterns matched in {time() - start:.2f}s")
+
+########################################################################################
+###############################################################################################################
+########################################################################################
+#
+# All articles
+#
+print("\n\n" + "-" * 80)
+print("All articles Search")
+print("-" * 80)
+start = time()
+max_words_limit = 5000000
+min_letters = 3
+
+# Queries
+queries = [
+    ['elephants', (0, 20), 'are', (0, 20), 'to'],
+    ['technical', (0, 20), 'university', (0, 20), 'denmark'],
+    ['testing', (0, 20), 'with', (0, 20), 'a', (0, 30), 'lot', (0, 4), 'of', (0, 5), 'words'],
+    ['stress', (0, 250), 'test'],
+    ['object', (10, 200), 'application', (0, 100), 'python', (10, 200), 'system', (0, 100), 'computer',
+     (0, 10), 'science', (0, 150), 'linux', (0, 200), 'ruby']
+]
+
+for query in queries:
+
+    ########################################################################################
+    # Search specification
+
+    print(f"\nStarting query for {query}")
+
+    # Start main timer
+    query_start = time()
+
+    ########################################################################################
+    # Word substring search -> word set
+
+    # Specific words
+    search_words = []
+    while not search_words:
+        search_words = [word for word in query if isinstance(word, str) if len(word) >= min_letters]
+        min_letters -= 1
+
+
+    # Search for words as substrings in word-database
+    matching_words = []
+    for word_nr, word in enumerate(search_words):
+        # Test string and pattern
+        pattern = re.compile(word)
+
+        # Find positions
+        match_indices = [match.start() for match in pattern.finditer(massive_keys_string)]
+
+        # Find keys
+        located_keys = [key_index_list[match] for match in match_indices]
+
+        # Append
+        if len(located_keys) <= max_words_limit:
+            matching_words.append(located_keys)
+
+    # print("matching_words:", len(matching_words), sum([len(val) for val in matching_words]))
 
     ########################################################################################
     # Words -> articles
@@ -220,6 +336,8 @@ for query in queries:
     for article_set in article_list_list[1:]:
         intersecting_articles = intersecting_articles.intersection(set(article_set))
 
+    # print("intersecting_articles:", len(intersecting_articles))
+
     ########################################################################################
     # Initial patterns match in article set
 
@@ -237,14 +355,15 @@ for query in queries:
 
         # Get article
         fetch = cursor_articles.fetchone()
-        if fetch is None:
-            break
-        article_nr, article = fetch
+        if fetch is not None:
+            article_nr, article = fetch
 
-        search = search_pattern.search(article)
-        if search:
-            filtered_articles[article_nr] = article
-            filtered_articles_results[article_nr] = search
+            search = search_pattern.search(article)
+            if search:
+                filtered_articles[article_nr] = article
+                filtered_articles_results[article_nr] = search
+
+    # print("filtered_articles_results:", len(filtered_articles_results))
 
     ########################################################################################
     # Recursive matching of pattern
