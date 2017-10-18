@@ -14,6 +14,11 @@ sys.setrecursionlimit(25000)
 
 input_dir = Path("/dtu-compute", "dabai")
 
+
+def pattern_to_filename(pattern):
+    return "".join([str(val).replace(", ", "_").replace(",", "_") for val in pattern]) + ".txt"
+
+
 # Connect to article-database
 connection_articles = sqlite3.connect(str(Path(input_dir, "Articles.db")))
 cursor_articles = connection_articles.cursor()
@@ -88,6 +93,8 @@ match_indices = [match.start() for match in pattern.finditer(massive_keys_string
 located_keys = [key_index_list[match] for match in match_indices]
 print('elephants', "is in", vocabulary_words[located_keys[0]])
 
+output_path = Path(input_dir, "outputs")
+
 ########################################################################################
 ###############################################################################################################
 ########################################################################################
@@ -117,10 +124,16 @@ queries = [
 for query in queries:
     query_start = time()
     print(f"\nStarting query for {query}")
-    result = nested_search(query, article)
+    result = nested_search(query, article, identifier=cat_article_id)
     print("Got 1 results and {} matches in {:.2f}s".format(len(result), time() - query_start))
 
+    with Path(output_path, "Cat_" + pattern_to_filename(query)).open("w") as file:
+        for val in sorted(result):
+            file.write("{:10d} : {:8d}-{:<8d}: {}\n".format(*val))
+
 print(f"\nAll patterns in cat-article matched in {time() - start:.2f}s")
+
+
 
 ########################################################################################
 ###############################################################################################################
@@ -138,8 +151,10 @@ min_letters = 3
 
 # Get 'a'-articles
 a_article_ids = pickle.load(Path(input_dir, "a_articles.p").open("rb"))
+print("Executing SQL fetch command")
 cursor_articles.execute("SELECT article FROM articles WHERE ident in ({})"
                         .format(",".join([str(val) for val in a_article_ids])))
+print("Fetching articles")
 articles = [val[0] for val in cursor_articles.fetchall()]
 
 # Queries
@@ -241,18 +256,22 @@ for query in queries:
     # Recursive matching of pattern
 
     # Search results
-    results = 0
+    results = []
     matches = 0
 
     # Go through filtered articles
     len(filtered_articles)
     for key_nr, key in enumerate(list(filtered_articles.keys())):
-        result = nested_search(task_inputs=query, string=filtered_articles[key])
+        result = nested_search(task_inputs=query, string=filtered_articles[key], identifier=key_nr)
         if result:
-            results += 1
+            results.extend(result)
             matches += len(result)
 
-    print("Got {} results and {} matches in {:.2f}s".format(results, matches, time() - query_start))
+    print("Got {} results and {} matches in {:.2f}s".format(len(results), matches, time() - query_start))
+
+    with Path(output_path, "A_" + pattern_to_filename(query)).open("w") as file:
+        for val in sorted(results):
+            file.write("{:10d} : {:8d}-{:<8d}: {}\n".format(*val))
 
 print(f"\nAll 'A'-articles and all patterns matched in {time() - start:.2f}s")
 
@@ -267,7 +286,7 @@ print("All articles Search")
 print("-" * 80)
 start = time()
 max_words_limit = 5000000
-min_letters = 3
+min_letters = 4
 
 # Queries
 queries = [
@@ -297,7 +316,6 @@ for query in queries:
     while not search_words:
         search_words = [word for word in query if isinstance(word, str) if len(word) >= min_letters]
         min_letters -= 1
-
 
     # Search for words as substrings in word-database
     matching_words = []
@@ -369,17 +387,21 @@ for query in queries:
     # Recursive matching of pattern
 
     # Search results
-    results = 0
+    results = []
     matches = 0
 
     # Go through filtered articles
     len(filtered_articles)
     for key_nr, key in enumerate(list(filtered_articles.keys())):
-        result = nested_search(task_inputs=query, string=filtered_articles[key])
+        result = nested_search(task_inputs=query, string=filtered_articles[key], identifier=key_nr)
         if result:
-            results += 1
+            results.extend(result)
             matches += len(result)
 
-    print("Got {} results and {} matches in {:.2f}s".format(results, matches, time() - query_start))
+    print("Got {} results and {} matches in {:.2f}s".format(len(results), matches, time() - query_start))
+
+    with Path(output_path, "All_" + pattern_to_filename(query)).open("w") as file:
+        for val in sorted(results):
+            file.write("{:10d} : {:8d}-{:<8d}: {}\n".format(*val))
 
 print(f"\nAll articles and all patterns matched in {time() - start:.2f}s")
