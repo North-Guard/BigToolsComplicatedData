@@ -1,7 +1,7 @@
 import regex as re
 import sys
 from pathlib import Path
-
+from collections import OrderedDict
 
 sys.setrecursionlimit(25000)
 
@@ -14,38 +14,42 @@ def task_re_pattern(task_inputs):
     return "".join(val if isinstance(val, str) else f".{{{val[0]},{val[1]}}}" for val in task_inputs)
 
 
-def nested_search(task_inputs, string):
-    # Find all starting points
-    start_pattern = task_inputs[0]
-    starting_points = list(reversed([val.start() for val in re.finditer(start_pattern, string)]))
-
-    # Make search-pattern
+def nested_search(task_inputs, string, identifier=None):
     pattern = task_re_pattern(task_inputs)
-    pattern = "(?<=(" + pattern + "))"
 
-    # Determine longest possible pattern-string
-    max_pattern_length = task_max_pattern_length(task_inputs)
-
-    # Recursively apply pattern
-    return _nested_re_search(pattern, string, starting_points, max_pattern_length)
-
-
-def _nested_re_search(pattern, string, starting_points, max_pattern_length=None):
-    if not starting_points:
-        return []
-
-    # Cut off start, which has already been handled
-    c_start = starting_points.pop()
-    c_end = c_start + max_pattern_length
-
-    # Search in string
-    search = list(re.finditer(pattern, string, pos=c_start, endpos=c_end))
+    # Get searches through substrings
+    all_searches = _nested_re_search(pattern, string, identifier=identifier)
 
     # Convert to include starting-point
-    search = [(val.start(1), val.end(1), val.group(1)) for val in search]
+    all_searches = list(all_searches)
+
+    return all_searches
+
+
+def _nested_re_search(pattern, string, identifier, start=None, end=None):
+    start = start if start is not None else 0
+    end = end if end is not None else len(string)
+
+    # Search in string
+    searches = list(re.finditer(pattern, string, pos=start, endpos=end, overlapped=True))
+    all_searches = set((identifier, val.start(), val.end(), val.group()) for val in searches)
+
+    # Search substring
+    for search in searches:
+        # Cut off start
+        all_searches.update(_nested_re_search(pattern, string,
+                                              start=search.start() + 1,
+                                              end=search.end(),
+                                              identifier=identifier))
+
+        # Cut off end
+        all_searches.update(_nested_re_search(pattern, string,
+                                              start=search.start(),
+                                              end=search.end() - 1,
+                                              identifier=identifier))
 
     # Recursion
-    return search + _nested_re_search(pattern, string, starting_points, max_pattern_length)
+    return all_searches
 
 
 if __name__ == "__main__":
@@ -74,3 +78,6 @@ if __name__ == "__main__":
     results = nested_search(pattern, test_str)
     for result in results:
         print(f"\t{result!s:40s}", "Correctness-check:", result[2] == test_str[result[0]:result[1]])
+
+    bob = "english-to-chinese dictionary and is arranged [[english alphabet"
+    print(nested_search(['english', (0, 100), 'alphabet'], bob))
