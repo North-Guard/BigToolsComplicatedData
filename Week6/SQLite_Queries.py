@@ -8,10 +8,10 @@ Created on Tue Oct 10 14:25:47 2017
 import sqlite3
 from pathlib import Path
 import pprint
-
 ##Query for Exercise 5.1
 
-filepath=Path("/Week6","Files")
+
+filepath=Path("/Files")
 filename="northwind.db"
 
 def decode(text: bytes):
@@ -54,7 +54,7 @@ c.close()
 
 ##Query for Exercise 5.2
 
-filepath=Path("/Users","lousy12","PycharmProjects","Big-Tools-for-Complicated-Data","Week6","Files")
+filepath=Path("/Files")
 filename="northwind.db"
 
 datapath=Path(filepath,filename)
@@ -86,7 +86,7 @@ c.close()
 
 ##Query for Exercise 5.3
 
-filepath=Path("/Users","lousy12","PycharmProjects","Big-Tools-for-Complicated-Data","Week6","Files")
+filepath=Path("/Files")
 filename="northwind.db"
 
 datapath=Path(filepath,filename)
@@ -94,8 +94,16 @@ conn=sqlite3.connect(str(datapath))
 conn.text_factory = bytes
 c=conn.cursor()
 
-c.execute('''SELECT Orders.CustomerID, EmployeeID
-              , Sum((Quantity*"Order Details".UnitPrice*(1-Discount))) as Total_Amount, group_concat(Products.ProductName,", ") as Products FROM Orders
+# Begin the query with the standard fields we want to keep
+# Create a field called sum that calculates the total of each group
+# Create a field that concatenates all products into one field
+# Inner join the table Orders with "Order-details" matching on OrderID
+# Inner join these results on the table products matching on ProductID
+# Limit the results to those having "ALFKI" as CustomerID
+# Group all results by EmployeeID
+c.execute('''SELECT Orders.CustomerID, EmployeeID,
+              Sum((Quantity*"Order Details".UnitPrice*(1-Discount))) as Total_Amount,
+               group_concat(Products.ProductName,", ") as Products FROM Orders
             INNER JOIN "Order Details"
               ON Orders.OrderID = "Order Details".OrderID
             INNER JOIN Products
