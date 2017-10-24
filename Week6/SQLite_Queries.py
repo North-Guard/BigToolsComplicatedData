@@ -11,7 +11,7 @@ import pprint
 
 ##Query for Exercise 5.1
 
-filepath=Path("./Week6","Files")
+filepath=Path("/Week6","Files")
 filename="northwind.db"
 
 def decode(text: bytes):
